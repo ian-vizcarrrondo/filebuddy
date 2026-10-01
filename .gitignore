@@ -1,0 +1,15 @@
+# Python environments and caches
+.venv/
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Local application settings
+.filebuddy/
+
+# Generated conversion output
+File Buddy/
+
+# Local OS/editor files
+.DS_Store
+Thumbs.db

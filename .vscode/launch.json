@@ -1,0 +1,8 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    { "name": "Run File Buddy", "type": "debugpy", "request": "launch",
+      "program": "${workspaceFolder}/FileBuddy.pyw", "cwd": "${workspaceFolder}",
+      "python": "${workspaceFolder}/.venv/Scripts/python.exe" }
+  ]
+}

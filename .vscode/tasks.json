@@ -1,0 +1,11 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    { "label": "1. Setup File Buddy (installs Python if needed)", "type": "shell",
+      "command": "cmd /c setup_windows.bat", "problemMatcher": [] },
+    { "label": "2. Install local AI 3D engine", "type": "shell",
+      "command": "cmd /c install_ai_engine.bat", "problemMatcher": [] },
+    { "label": "Run File Buddy", "type": "shell",
+      "command": ".venv\\Scripts\\python.exe FileBuddy.pyw", "problemMatcher": [] }
+  ]
+}
