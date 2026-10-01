@@ -7,18 +7,18 @@ import traceback
 from pathlib import Path
 
 from PySide6.QtCore import QObject, Qt, QThread, QUrl, Signal, Slot
-from PySide6.QtGui import QAction, QDesktopServices, QFont, QIcon, QPixmap
+from PySide6.QtGui import QAction, QColor, QDesktopServices, QFont, QIcon, QPalette, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView, QApplication, QButtonGroup, QCheckBox, QComboBox, QDialog,
-    QDialogButtonBox, QDoubleSpinBox, QFileDialog, QFormLayout, QGroupBox,
+    QColorDialog, QDialogButtonBox, QDoubleSpinBox, QFileDialog, QFormLayout, QGroupBox,
     QHBoxLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem, QMainWindow,
-    QMessageBox, QMenu, QPlainTextEdit, QProgressBar, QPushButton, QRadioButton,
+    QLayout, QMessageBox, QMenu, QPlainTextEdit, QProgressBar, QPushButton, QRadioButton,
     QSpinBox, QStackedWidget, QSystemTrayIcon, QTabWidget, QVBoxLayout, QWidget,
 )
 
 from . import converters as conv
 from . import image3d
-from .buddy import DesktopBuddy, buddy_pixmap, make_icons
+from .buddy import CHARACTERS, DEFAULT_CHARACTER, DesktopBuddy, buddy_pixmap, make_icons
 
 APP_DIR = Path(__file__).resolve().parent.parent
 SETTINGS_PATH = Path.home() / ".filebuddy" / "settings.json"
@@ -83,7 +83,7 @@ class DropList(QListWidget):
             from PySide6.QtGui import QPainter
 
             p = QPainter(self.viewport())
-            p.setPen(Qt.gray)
+            p.setPen(self.palette().color(QPalette.Text))
             p.drawText(self.viewport().rect(), Qt.AlignCenter, self.placeholder)
 
     def dragEnterEvent(self, e):
@@ -94,6 +94,7 @@ class DropList(QListWidget):
 
     def dropEvent(self, e):
         self.add_paths([u.toLocalFile() for u in e.mimeData().urls()])
+        e.acceptProposedAction()
 
     def add_paths(self, paths):
         existing = set(self.paths())
@@ -258,7 +259,7 @@ class QuickConvertDialog(QDialog):
         title = QLabel("Quick Convert")
         title.setFont(QFont(title.font().family(), 16, QFont.Bold))
         subtitle = QLabel("Drop one file here, pick a new format, and you're done.")
-        subtitle.setStyleSheet("color:#8a93a8")
+        subtitle.setObjectName("subtitle")
         layout.addWidget(title)
         layout.addWidget(subtitle)
 
@@ -281,7 +282,7 @@ class QuickConvertDialog(QDialog):
 
         self.status = QLabel("Ready when you are.")
         self.status.setWordWrap(True)
-        self.status.setStyleSheet("color:#aab4ca")
+        self.status.setObjectName("muted")
         layout.addWidget(self.status)
 
         buttons = QHBoxLayout()
@@ -575,6 +576,66 @@ class SettingsDialog(QDialog):
         self.setWindowTitle("File Buddy settings")
         self.settings = settings
         f = QFormLayout(self)
+        f.setSpacing(8 if settings.get("density", "comfortable") == "compact" else 12)
+
+        character_row = QHBoxLayout()
+        self.character = QComboBox()
+        for key, label in CHARACTERS.items():
+            self.character.addItem(label, key)
+        character = settings.get("character", DEFAULT_CHARACTER)
+        index = self.character.findData(character)
+        self.character.setCurrentIndex(index if index >= 0 else 0)
+        self.character_preview = QLabel()
+        self.character_preview.setFixedSize(64, 64)
+        character_row.addWidget(self.character, 1)
+        character_row.addWidget(self.character_preview)
+        self.character.currentIndexChanged.connect(self.update_character_preview)
+        self.update_character_preview()
+        f.addRow("Desktop companion:", character_row)
+
+        self.theme = QComboBox()
+        self.theme.addItem("Light", "light")
+        self.theme.addItem("Dark", "dark")
+        theme_index = self.theme.findData(settings.get("theme", "light"))
+        self.theme.setCurrentIndex(theme_index if theme_index >= 0 else 0)
+        f.addRow("Theme:", self.theme)
+
+        accent_row = QHBoxLayout()
+        self._accent_color = settings.get("accent_color", "#ed7968")
+        self.accent_button = QPushButton("Choose accent color...")
+        self.accent_swatch = QLabel()
+        self.accent_swatch.setFixedSize(30, 24)
+        self.accent_button.clicked.connect(self.choose_accent_color)
+        accent_row.addWidget(self.accent_button)
+        accent_row.addWidget(self.accent_swatch)
+        accent_row.addStretch()
+        self.update_accent_swatch()
+        f.addRow("Accent color:", accent_row)
+
+        self.font_size = QSpinBox()
+        self.font_size.setRange(10, 20)
+        self.font_size.setSuffix(" px")
+        try:
+            font_size = int(settings.get("font_size", 13))
+        except (TypeError, ValueError):
+            font_size = 13
+        self.font_size.setValue(font_size)
+        f.addRow("Text size:", self.font_size)
+
+        self.density = QComboBox()
+        self.density.addItem("Comfortable", "comfortable")
+        self.density.addItem("Compact", "compact")
+        density_index = self.density.findData(settings.get("density", "comfortable"))
+        self.density.setCurrentIndex(density_index if density_index >= 0 else 0)
+        f.addRow("Layout density:", self.density)
+
+        self.show_log = QCheckBox("Show activity log")
+        self.show_log.setChecked(settings.get("show_log", True))
+        f.addRow("", self.show_log)
+        self.show_output = QCheckBox("Show result buttons")
+        self.show_output.setChecked(settings.get("show_output", True))
+        f.addRow("", self.show_output)
+
         self.key = QLineEdit(settings.get("meshy_key", ""))
         self.key.setEchoMode(QLineEdit.Password)
         self.key.setPlaceholderText("msy_...")
@@ -587,44 +648,147 @@ class SettingsDialog(QDialog):
         bb.rejected.connect(self.reject)
         f.addRow(bb)
 
+    def update_character_preview(self):
+        self.character_preview.setPixmap(
+            buddy_pixmap(60, "happy", self.character.currentData()))
+
+    def choose_accent_color(self):
+        color = QColorDialog.getColor(QColor(self._accent_color), self, "Choose accent color")
+        if color.isValid():
+            self._accent_color = color.name()
+            self.update_accent_swatch()
+
+    def update_accent_swatch(self):
+        color = QColor(self._accent_color)
+        if not color.isValid():
+            color = QColor("#ed7968")
+            self._accent_color = color.name()
+        self.accent_swatch.setStyleSheet(
+            f"background-color: {color.name()}; border: 1px solid #777; border-radius: 4px;")
+
     def values(self) -> dict:
-        return {**self.settings, "meshy_key": self.key.text().strip(), "out_dir": self.out.text().strip()}
+        return {
+            **self.settings,
+            "character": self.character.currentData() or DEFAULT_CHARACTER,
+            "theme": self.theme.currentData() or "light",
+            "accent_color": self._accent_color,
+            "font_size": self.font_size.value(),
+            "density": self.density.currentData() or "comfortable",
+            "show_log": self.show_log.isChecked(),
+            "show_output": self.show_output.isChecked(),
+            "meshy_key": self.key.text().strip(),
+            "out_dir": self.out.text().strip(),
+        }
 
 
 # ---------------------------------------------------------------------------
 # Main window
 # ---------------------------------------------------------------------------
 STYLE = """
-* { font-family: "Trebuchet MS"; font-size: 13px; }
-QMainWindow, QWidget#root { background: #fff7ec; color: #3b3542; }
-QLabel, QCheckBox, QRadioButton, QGroupBox { color: #3b3542; }
-QLabel#title { color: #302b3b; font-size: 24px; font-weight: bold; }
-QLabel#eyebrow { color: #e87967; font-size: 10px; font-weight: bold; }
-QLabel#subtitle { color: #98716b; font-size: 13px; }
-QGroupBox { background: #fffdf9; border: 2px solid #eadbd0; border-radius: 12px; margin-top: 14px; padding: 10px; }
-QGroupBox::title { subcontrol-origin: margin; left: 12px; padding: 0 6px; color: #e87967; font-weight: bold; }
-QListWidget#drop { background: #fffdf8; border: 2px dashed #edaa95; border-radius: 14px; color: #5e5260; padding: 8px; }
-QListWidget#drop::item { padding: 6px; border-radius: 8px; }
-QListWidget#drop::item:selected { background: #ffe0d5; color: #3b3542; }
-QLabel#preview { background: #fff3e8; border: 2px dashed #edc7b6; border-radius: 14px; color: #a78379; }
-QLabel#tips { background: #e2f3e9; border: 1px solid #b9dfc9; border-radius: 12px; padding: 10px; color: #456556; }
+* { font-size: @font_size@px; }
+QMainWindow, QDialog, QWidget#root { background: @background@; color: @foreground@; }
+QLabel, QCheckBox, QRadioButton, QGroupBox { color: @foreground@; }
+QLabel#title { color: @foreground@; font-size: @title_size@px; font-weight: bold; }
+QLabel#eyebrow { color: @accent@; font-size: @eyebrow_size@px; font-weight: bold; }
+QLabel#subtitle { color: @muted@; font-size: @font_size@px; }
+QLabel#muted { color: @muted@; }
+QGroupBox { background: @panel@; border: 2px solid @border@; border-radius: 12px; margin-top: 14px; padding: @group_padding@px; }
+QGroupBox::title { subcontrol-origin: margin; left: 12px; padding: 0 6px; color: @accent@; font-weight: bold; }
+QListWidget#drop { background: @field@; border: 2px dashed @accent@; border-radius: 14px; color: @foreground@; padding: 8px; }
+QListWidget#drop::item { padding: @item_padding@px; border-radius: 8px; }
+QListWidget#drop::item:selected { background: @selection@; color: @selection_text@; }
+QLabel#preview { background: @field@; border: 2px dashed @border@; border-radius: 14px; color: @muted@; }
+QLabel#tips { background: @tips_bg@; border: 1px solid @tips_border@; border-radius: 12px; padding: 10px; color: @tips_text@; }
 QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox, QPlainTextEdit {
-    background: #fffdf9; color: #3b3542; border: 2px solid #eadbd0; border-radius: 8px; padding: 5px; selection-background-color: #ffc9bb; }
-QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QDoubleSpinBox:focus { border-color: #e87967; }
-QPushButton { background: #fffdf9; color: #594d59; border: 2px solid #eadbd0; border-radius: 9px; padding: 7px 13px; font-weight: bold; }
-QPushButton:hover { background: #fff0df; border-color: #e7ae96; }
-QPushButton#primary { background: #ed7968; color: white; border: none; font-weight: bold; padding: 11px; font-size: 14px; }
-QPushButton#primary:hover { background: #df6556; }
-QPushButton:disabled { background: #f0e7df; color: #b6a8a0; border-color: #eadbd0; }
+    background: @field@; color: @foreground@; border: 2px solid @border@; border-radius: 8px; padding: 5px; selection-background-color: @selection@; }
+QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QDoubleSpinBox:focus { border-color: @accent@; }
+QPushButton { background: @panel@; color: @foreground@; border: 2px solid @border@; border-radius: 9px; padding: @button_vpad@px 13px; font-weight: bold; }
+QPushButton:hover { background: @hover@; border-color: @accent@; }
+QPushButton#primary { background: @accent@; color: @accent_text@; border: none; font-weight: bold; padding: 11px; font-size: @primary_size@px; }
+QPushButton#primary:hover { background: @accent_hover@; }
+QPushButton:disabled { background: @disabled_bg@; color: @disabled_text@; border-color: @border@; }
 QTabWidget::pane { border: none; }
-QTabBar::tab { background: #f6e9df; color: #93736d; padding: 9px 20px; margin-right: 4px; border-top-left-radius: 10px; border-top-right-radius: 10px; }
-QTabBar::tab:selected { background: #dff1e7; color: #3e6a54; font-weight: bold; }
-QScrollBar:vertical { background: #f6e9df; width: 10px; margin: 2px; }
-QScrollBar::handle:vertical { background: #e6b6a5; border-radius: 5px; min-height: 20px; }
+QTabBar::tab { background: @tab_bg@; color: @muted@; padding: @tab_vpad@px 20px; margin-right: 4px; border-top-left-radius: 10px; border-top-right-radius: 10px; }
+QTabBar::tab:selected { background: @selection@; color: @selection_text@; font-weight: bold; }
+QScrollBar:vertical { background: @tab_bg@; width: 10px; margin: 2px; }
+QScrollBar::handle:vertical { background: @accent@; border-radius: 5px; min-height: 20px; }
 QScrollBar::add-line, QScrollBar::sub-line { height: 0; }
-QProgressBar { background: #f0e5dc; border: none; border-radius: 6px; height: 10px; text-align: center; color: transparent; }
-QProgressBar::chunk { background: #77c89a; border-radius: 6px; }
+QProgressBar { background: @border@; border: none; border-radius: 6px; height: 10px; text-align: center; color: transparent; }
+QProgressBar::chunk { background: @accent@; border-radius: 6px; }
+QMenu { background: @panel@; border: 2px solid @border@; border-radius: 12px; padding: 6px; color: @foreground@; }
+QMenu::item { padding: 6px 22px 6px 14px; border-radius: 8px; }
+QMenu::item:selected { background: @selection@; color: @selection_text@; }
+QMenu::item:disabled { color: @accent@; font-weight: bold; }
+QMenu::separator { height: 2px; background: @border@; margin: 4px 8px; }
 """
+
+
+def build_stylesheet(settings: dict) -> str:
+    accent = QColor(settings.get("accent_color", "#ed7968"))
+    if not accent.isValid():
+        accent = QColor("#ed7968")
+
+    def luminance(color: QColor) -> float:
+        channels = [color.redF(), color.greenF(), color.blueF()]
+        linear = [c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4 for c in channels]
+        return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2]
+
+    def contrast_ratio(first: QColor, second: QColor) -> float:
+        high, low = sorted((luminance(first), luminance(second)), reverse=True)
+        return (high + 0.05) / (low + 0.05)
+
+    def readable_text(background: QColor) -> str:
+        dark_text = QColor("#17131c")
+        light_text = QColor("#ffffff")
+        return (dark_text if contrast_ratio(dark_text, background) >=
+                contrast_ratio(light_text, background) else light_text).name()
+
+    theme = settings.get("theme", "light")
+    dark = theme == "dark"
+    if dark:
+        colors = {
+            "background": "#202127", "panel": "#292b33", "field": "#252730",
+            "foreground": "#eeeaf1", "muted": "#bcb2bf", "border": "#454650",
+            "hover": "#393b46", "tab_bg": "#333540", "tips_bg": "#263832",
+            "tips_border": "#3e6454", "tips_text": "#c2e3d1",
+            "disabled_bg": "#33343a", "disabled_text": "#85838c",
+            "selection": accent.darker(165).name(),
+        }
+    else:
+        colors = {
+            "background": "#fff7ec", "panel": "#fffdf9", "field": "#fffdf9",
+            "foreground": "#3b3542", "muted": "#98716b", "border": "#eadbd0",
+            "hover": "#fff0df", "tab_bg": "#f6e9df", "tips_bg": "#e2f3e9",
+            "tips_border": "#b9dfc9", "tips_text": "#456556",
+            "disabled_bg": "#f0e7df", "disabled_text": "#b6a8a0",
+            "selection": accent.lighter(165).name(),
+        }
+    selection_text = readable_text(QColor(colors["selection"]))
+    accent_text = readable_text(accent)
+    try:
+        font_size = max(10, min(20, int(settings.get("font_size", 13))))
+    except (TypeError, ValueError):
+        font_size = 13
+    compact = settings.get("density", "comfortable") == "compact"
+    values = {
+        **colors,
+        "accent": accent.name(),
+        "accent_hover": accent.darker(110).name(),
+        "selection_text": selection_text,
+        "accent_text": accent_text,
+        "font_size": font_size,
+        "title_size": font_size + 11,
+        "eyebrow_size": max(9, font_size - 3),
+        "primary_size": font_size + 1,
+        "group_padding": 6 if compact else 10,
+        "item_padding": 4 if compact else 6,
+        "button_vpad": 5 if compact else 7,
+        "tab_vpad": 7 if compact else 9,
+    }
+    style = STYLE
+    for key, value in values.items():
+        style = style.replace(f"@{key}@", str(value))
+    return style
 
 
 class MainWindow(QMainWindow):
@@ -644,10 +808,9 @@ class MainWindow(QMainWindow):
         v = QVBoxLayout(root)
 
         head = QHBoxLayout()
-        mascot = QLabel()
-        mascot.setPixmap(buddy_pixmap(64, "happy"))
-        mascot.setFixedSize(66, 66)
-        head.addWidget(mascot)
+        self.mascot = QLabel()
+        self.mascot.setFixedSize(66, 66)
+        head.addWidget(self.mascot)
         copy = QVBoxLayout()
         eyebrow = QLabel("YOUR DESKTOP FORMAT FRIEND")
         eyebrow.setObjectName("eyebrow")
@@ -681,7 +844,9 @@ class MainWindow(QMainWindow):
         self.logbox.setMaximumHeight(150)
         v.addWidget(self.logbox)
 
-        br = QHBoxLayout()
+        self.output_controls = QWidget()
+        br = QHBoxLayout(self.output_controls)
+        br.setContentsMargins(0, 0, 0, 0)
         self.open_file_btn = QPushButton("Open result")
         self.open_file_btn.clicked.connect(lambda: self.last_outputs and open_path(self.last_outputs[-1]))
         self.open_dir_btn = QPushButton("Open folder")
@@ -690,7 +855,7 @@ class MainWindow(QMainWindow):
             b.setEnabled(False)
             br.addWidget(b)
         br.addStretch()
-        v.addLayout(br)
+        v.addWidget(self.output_controls)
 
         self.setCentralWidget(root)
         self.log("Hey! Drop some files in and I'll convert them.")
@@ -720,7 +885,31 @@ class MainWindow(QMainWindow):
 
         # the cute floating helper that sits above the taskbar
         self.buddy = DesktopBuddy(self)
+        self.apply_ui_preferences()
         self.toggle_buddy(self.settings.get("show_buddy", True))
+
+    def apply_ui_preferences(self):
+        app = QApplication.instance()
+        if app:
+            app.setStyleSheet(build_stylesheet(self.settings))
+        icon = QIcon(buddy_pixmap(
+            256, "idle", self.settings.get("character", DEFAULT_CHARACTER)))
+        self.setWindowIcon(icon)
+        self.quick_convert.setWindowIcon(icon)
+        if self.tray:
+            self.tray.setIcon(icon)
+        self.mascot.setPixmap(
+            buddy_pixmap(64, "happy", self.settings.get("character", DEFAULT_CHARACTER)))
+        compact = self.settings.get("density", "comfortable") == "compact"
+        for layout in self.findChildren(QLayout):
+            layout.setSpacing(6 if compact else 10)
+        central_layout = self.centralWidget().layout()
+        if central_layout:
+            central_layout.setContentsMargins(12 if compact else 18, 12 if compact else 18,
+                                              12 if compact else 18, 12 if compact else 18)
+        self.logbox.setVisible(self.settings.get("show_log", True))
+        self.output_controls.setVisible(self.settings.get("show_output", True))
+        self.buddy.update()
 
     def log(self, msg: str):
         self.logbox.appendPlainText(msg)
@@ -768,6 +957,7 @@ class MainWindow(QMainWindow):
         if d.exec():
             self.settings = d.values()
             save_settings(self.settings)
+            self.apply_ui_preferences()
             self.log("Settings saved.")
 
     def start(self, fn, button: QPushButton):
@@ -823,7 +1013,7 @@ def main():
     app = QApplication(sys.argv)
     app.setApplicationName("File Buddy")
     app.setQuitOnLastWindowClosed(False)
-    app.setStyleSheet(STYLE)
+    app.setStyleSheet(build_stylesheet(load_settings()))
     if not (APP_DIR / "assets" / "buddy_512.png").exists():
         try:
             make_icons(APP_DIR / "assets")

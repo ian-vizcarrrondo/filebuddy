@@ -52,6 +52,10 @@ Every AI result gets cleaned up automatically: holes filled, floating bits remov
 - Glossy/black plastic is hard for any AI. Soft light helps a lot.
 - For a perfect fit (e.g. printing a part that attaches to it), AI won't be exact to the millimeter. Use calipers and check key dimensions in your slicer.
 
+## Make File Buddy yours
+
+Open **Settings** to choose the desktop companion (Buddy the paper pal, Pip the fox, Mochi the cat, Atty the serious tuxedo cat, Nyx the mysterious night sprite, or Byte the robot), switch between light and dark themes, pick an accent color, and adjust text size and layout density. You can also show or hide the activity log and result buttons. Your choices are saved on this computer.
+
 ## Files
 - `filebuddy/app.py` - the window
 - `filebuddy/converters.py` - all file conversions (also works from the command line: `python -m filebuddy.converters file.pdf png`)
