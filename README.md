@@ -1,6 +1,6 @@
-# File Buddy
+# 📁 File Buddy
 
-Desktop companion that converts pretty much any file, and turns photos into 3D models (STL, 3MF, OBJ, GLB).
+Convert files, turn photos into 3D models, and personalize your desktop companion. 🐾✨
 
 ## Setup (one time)
 
