@@ -56,6 +56,10 @@ Every AI result gets cleaned up automatically: holes filled, floating bits remov
 
 Open **Settings** to choose the desktop companion (Buddy the paper pal, Pip the fox, Mochi the cat, Atty the serious tuxedo cat, Nyx the mysterious night sprite, or Byte the robot), switch between light and dark themes, pick an accent color, and adjust text size and layout density. You can also show or hide the activity log and result buttons. Your choices are saved on this computer.
 
+## License
+
+File Buddy is available under the [PolyForm Noncommercial License 1.0.0](./LICENSE). You may use, modify, and share it for permitted noncommercial purposes. Commercial use requires separate permission from the copyright holder. This is a source-available license, not an OSI-approved open-source license; it applies to this software, not to the general idea of a file-conversion companion. See the license for the complete terms.
+
 ## Files
 - `filebuddy/app.py` - the window
 - `filebuddy/converters.py` - all file conversions (also works from the command line: `python -m filebuddy.converters file.pdf png`)
