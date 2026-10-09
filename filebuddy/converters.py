@@ -417,6 +417,11 @@ def convert_model(src: Path, out_dir: Path, target: str, opts: dict) -> list[Pat
 def convert(src: str | Path, out_dir: str | Path, target: str, opts: dict | None = None) -> list[Path]:
     src, out_dir = Path(src), Path(out_dir)
     opts = opts or {}
+    if not src.is_file():
+        raise ConversionError(
+            f'"{src.name}" is not available at the dropped location. '
+            "If it is in OneDrive, wait for it to finish syncing, then try again."
+        )
     out_dir.mkdir(parents=True, exist_ok=True)
     cat = category_of(src)
 
