@@ -42,6 +42,19 @@ CHARACTERS = {
     "nyx": "Nyx (Night Sprite)",
     "robot": "Byte (Robot)",
 }
+FLUID_CHARACTERS = {
+    "vanta": "Vanta (Abyssal Ooze)",
+    "tide": "Tide (Living Water)",
+    "prism": "Prism (Iridescent Gel)",
+    "ember": "Ember (Molten Slime)",
+}
+
+_FLUID_PALETTES = {
+    "vanta": ("#10121d", "#353451", "#7773bb", "#73e9f2", "#efffff"),
+    "tide": ("#07343d", "#087b83", "#27c5bd", "#8af5e8", "#f2ffff"),
+    "prism": ("#24143f", "#70459a", "#ec70cf", "#8eeaff", "#fff6ff"),
+    "ember": ("#351512", "#8b321f", "#f2763e", "#ffd16a", "#fff8e8"),
+}
 
 _CHARACTER_COLORS = {
     "paper": {
@@ -265,6 +278,137 @@ def _draw_atty(p: QPainter, blink: float, look: float, shadow: bool) -> None:
         p.drawLine(QPointF(133, 98), QPointF(158, end_y))
 
 
+def _draw_fluid_buddy(p: QPainter, mood: str, blink: float, t: float,
+                      look: float, shadow: bool, character: str) -> None:
+    """Draw an original glossy, shape-shifting liquid companion."""
+    base, deep, glow, eye, shine = (
+        QColor(color) for color in _FLUID_PALETTES[character])
+    bob = math.sin(t * 2.4) * 2
+    if mood == "excited":
+        bob -= abs(math.sin(t * 10)) * 3
+    p.save()
+    p.translate(0, bob)
+
+    if shadow:
+        gradient = QRadialGradient(QPointF(100, 184), 65)
+        gradient.setColorAt(0, QColor(2, 7, 18, 95))
+        gradient.setColorAt(1, QColor(2, 7, 18, 0))
+        p.setPen(Qt.NoPen)
+        p.setBrush(gradient)
+        p.drawEllipse(QRectF(32, 166, 136, 32))
+
+    p.setPen(QPen(deep, 13, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+    for index, start_x in enumerate((62, 138)):
+        wave = math.sin(t * 2 + index * math.pi) * 7
+        tendril = QPainterPath()
+        tendril.moveTo(start_x, 130)
+        tendril.cubicTo(start_x - 22 + wave, 150, start_x + 22 - wave, 169,
+                        start_x + wave, 178)
+        p.drawPath(tendril)
+        p.setPen(Qt.NoPen)
+        p.setBrush(QColor(glow.red(), glow.green(), glow.blue(), 205))
+        p.drawEllipse(QPointF(start_x + wave, 178), 5, 7)
+        p.setPen(QPen(deep, 13, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+
+    blob = QPainterPath()
+    blob.moveTo(100, 24)
+    blob.cubicTo(119, 20, 126, 34, 139, 38)
+    blob.cubicTo(161, 44, 165, 63, 159, 81)
+    blob.cubicTo(174, 100, 163, 119, 161, 136)
+    blob.cubicTo(158, 160, 139, 169, 119, 164)
+    blob.cubicTo(103, 178, 83, 168, 69, 164)
+    blob.cubicTo(44, 162, 36, 144, 41, 124)
+    blob.cubicTo(28, 105, 38, 86, 42, 68)
+    blob.cubicTo(45, 48, 60, 40, 78, 38)
+    blob.cubicTo(83, 30, 91, 25, 100, 24)
+    blob.closeSubpath()
+
+    gradient = QLinearGradient(38, 30, 160, 166)
+    gradient.setColorAt(0, glow)
+    gradient.setColorAt(0.38, base)
+    gradient.setColorAt(1, deep)
+    p.setPen(QPen(QColor(glow.red(), glow.green(), glow.blue(), 200),
+                  3, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+    p.setBrush(gradient)
+    p.drawPath(blob)
+
+    sheen = QPainterPath()
+    sheen.moveTo(54, 75)
+    sheen.cubicTo(60, 48, 87, 38, 111, 42)
+    p.setPen(QPen(QColor(shine.red(), shine.green(), shine.blue(), 110),
+                  6, Qt.SolidLine, Qt.RoundCap))
+    p.setBrush(Qt.NoBrush)
+    p.drawPath(sheen)
+    p.setPen(Qt.NoPen)
+    p.setBrush(QColor(shine.red(), shine.green(), shine.blue(), 48))
+    p.drawEllipse(QRectF(54, 52, 48, 17))
+    p.drawEllipse(QRectF(139, 106, 9, 20))
+    p.drawEllipse(QRectF(51, 132, 8, 13))
+
+    if character == "vanta":
+        vein = QPainterPath()
+        vein.moveTo(52, 112)
+        vein.cubicTo(65, 118, 56, 137, 72, 145)
+        vein.moveTo(148, 55)
+        vein.cubicTo(134, 62, 147, 76, 137, 87)
+        p.setPen(QPen(QColor(shine.red(), shine.green(), shine.blue(), 75),
+                      3, Qt.SolidLine, Qt.RoundCap))
+        p.drawPath(vein)
+    elif character == "tide":
+        p.setPen(QPen(QColor(shine.red(), shine.green(), shine.blue(), 145), 2))
+        p.setBrush(QColor(shine.red(), shine.green(), shine.blue(), 35))
+        for x, y, radius in ((53, 99, 5), (146, 96, 4), (129, 143, 3)):
+            p.drawEllipse(QPointF(x, y), radius, radius)
+    elif character == "prism":
+        facet = QPainterPath()
+        facet.moveTo(128, 47)
+        facet.lineTo(151, 63)
+        facet.lineTo(139, 77)
+        facet.closeSubpath()
+        facet.moveTo(49, 115)
+        facet.lineTo(61, 127)
+        facet.lineTo(48, 143)
+        facet.closeSubpath()
+        p.setPen(QPen(QColor(shine.red(), shine.green(), shine.blue(), 120), 2))
+        p.setBrush(QColor(glow.red(), glow.green(), glow.blue(), 42))
+        p.drawPath(facet)
+    elif character == "ember":
+        vein = QPainterPath()
+        vein.moveTo(52, 107)
+        vein.cubicTo(67, 115, 56, 128, 70, 141)
+        vein.moveTo(148, 99)
+        vein.cubicTo(136, 110, 148, 122, 133, 139)
+        p.setPen(QPen(QColor(shine.red(), shine.green(), shine.blue(), 125),
+                      3, Qt.SolidLine, Qt.RoundCap))
+        p.drawPath(vein)
+
+    look_dx = max(-1.0, min(1.0, look)) * 3
+    if mood in ("happy", "done"):
+        p.setPen(QPen(eye, 5, Qt.SolidLine, Qt.RoundCap))
+        p.drawArc(QRectF(64, 73, 27, 20), 20 * 16, 140 * 16)
+        p.drawArc(QRectF(109, 73, 27, 20), 20 * 16, 140 * 16)
+    elif mood == "sleepy" or blink > 0.85:
+        p.setPen(QPen(eye, 5, Qt.SolidLine, Qt.RoundCap))
+        p.drawLine(QPointF(66, 84), QPointF(88, 84))
+        p.drawLine(QPointF(111, 84), QPointF(133, 84))
+    else:
+        eye_h = 23 * (1.2 if mood == "excited" else 1) * (1 - blink)
+        p.setPen(Qt.NoPen)
+        p.setBrush(eye)
+        for x in (77, 123):
+            p.drawEllipse(QRectF(x - 8 + look_dx, 72, 16, max(3, eye_h)))
+            p.setBrush(QColor("#ffffff"))
+            p.drawEllipse(QPointF(x - 2 + look_dx, 77), 3, 4)
+            p.setBrush(eye)
+
+    p.setPen(QPen(shine, 4, Qt.SolidLine, Qt.RoundCap))
+    p.drawArc(QRectF(88, 102, 24, 18), 205 * 16, 130 * 16)
+    if mood == "done":
+        for x, y in ((30, 47), (171, 54), (165, 145)):
+            _star(p, x, y, 7 + math.sin(t * 6) * 2, glow)
+    p.restore()
+
+
 def draw_buddy(p: QPainter, rect: QRectF, mood: str = "idle", blink: float = 0.0,
                t: float = 0.0, look: float = 0.0, shadow: bool = True,
                character: str = DEFAULT_CHARACTER) -> None:
@@ -279,6 +423,10 @@ def draw_buddy(p: QPainter, rect: QRectF, mood: str = "idle", blink: float = 0.0
     s = min(rect.width(), rect.height()) / 200.0
     p.translate(rect.x() + (rect.width() - 200 * s) / 2, rect.y() + (rect.height() - 200 * s) / 2)
     p.scale(s, s)
+    if character in FLUID_CHARACTERS:
+        _draw_fluid_buddy(p, mood, blink, t, look, shadow, character)
+        p.restore()
+        return
     if character == "atty":
         _draw_atty(p, blink, look, shadow)
         p.restore()
@@ -772,8 +920,12 @@ class DesktopBuddy(QWidget):
         squish = 1 + (math.sin(self.t * 2.4) * 0.02)
         b = self.BUDDY
         rect = QRectF(self.W - b - 6, self.H - b * squish - 2 + bob, b, b * squish)
+        settings = self._settings()
+        character = (settings.get("fluid_character", "vanta")
+                     if settings.get("fluid_mode") else
+                     settings.get("character", DEFAULT_CHARACTER))
         draw_buddy(p, rect, self.mood, self.blink, self.t, self.look,
-                   character=self._settings().get("character", DEFAULT_CHARACTER))
+                   character=character)
         if self.bubble:
             self._draw_bubble(p, self.bubble, QPointF(rect.center().x() - 20, rect.top() + 18))
         p.end()
@@ -796,7 +948,21 @@ class DesktopBuddy(QWidget):
         tp.lineTo(tail.x() + 4, tail.y() - 2)
         tp.lineTo(min(tail.x() + 12, x + w - 14), y + h - 1)
         path = path.united(tp)
-        dark = self._settings().get("theme") == "dark"
+        settings = self._settings()
+        if settings.get("fluid_mode"):
+            palette = _FLUID_PALETTES.get(settings.get("fluid_character", "vanta"),
+                                          _FLUID_PALETTES["vanta"])
+            bubble_gradient = QLinearGradient(x, y, x + w, y + h)
+            bubble_gradient.setColorAt(0, QColor(14, 35, 50, 238))
+            bubble_gradient.setColorAt(1, QColor(22, 27, 51, 238))
+            p.setPen(QPen(QColor(palette[3]), 2))
+            p.setBrush(bubble_gradient)
+            p.drawPath(path)
+            p.setPen(QColor("#f2f7ff"))
+            p.drawText(QRectF(x + 13, y + 9, w - 26, h - 18),
+                       Qt.TextWordWrap | Qt.AlignCenter, text)
+            return
+        dark = settings.get("theme") == "dark"
         bubble_ink = QColor("#eeeaf1") if dark else INK
         bubble_border = QColor(self._settings().get("accent_color", "#ed7968")) if dark else INK
         if not bubble_border.isValid():

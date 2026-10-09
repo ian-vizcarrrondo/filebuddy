@@ -18,7 +18,9 @@ from PySide6.QtWidgets import (
 
 from . import converters as conv
 from . import image3d
-from .buddy import CHARACTERS, DEFAULT_CHARACTER, DesktopBuddy, buddy_pixmap, make_icons
+from .buddy import (
+    CHARACTERS, DEFAULT_CHARACTER, FLUID_CHARACTERS, DesktopBuddy, buddy_pixmap, make_icons,
+)
 
 APP_DIR = Path(__file__).resolve().parent.parent
 SETTINGS_PATH = Path.home() / ".filebuddy" / "settings.json"
@@ -573,6 +575,7 @@ class StudioTab(QWidget):
 class SettingsDialog(QDialog):
     def __init__(self, settings: dict, parent=None):
         super().__init__(parent)
+        self.setAttribute(Qt.WA_TranslucentBackground, bool(settings.get("fluid_mode", False)))
         self.setWindowTitle("File Buddy settings")
         self.settings = settings
         f = QFormLayout(self)
@@ -590,8 +593,24 @@ class SettingsDialog(QDialog):
         character_row.addWidget(self.character, 1)
         character_row.addWidget(self.character_preview)
         self.character.currentIndexChanged.connect(self.update_character_preview)
-        self.update_character_preview()
         f.addRow("Desktop companion:", character_row)
+
+        self.fluid_mode = QCheckBox("Enable the liquid-glass interface and fluid buddies")
+        self.fluid_mode.setChecked(bool(settings.get("fluid_mode", False)))
+        self.fluid_mode.toggled.connect(self.update_character_preview)
+        f.addRow("Fluid Mode:", self.fluid_mode)
+        fluid_row = QHBoxLayout()
+        self.fluid_character = QComboBox()
+        for key, label in FLUID_CHARACTERS.items():
+            self.fluid_character.addItem(label, key)
+        fluid_index = self.fluid_character.findData(settings.get("fluid_character", "vanta"))
+        self.fluid_character.setCurrentIndex(fluid_index if fluid_index >= 0 else 0)
+        self.fluid_character.currentIndexChanged.connect(self.update_character_preview)
+        fluid_row.addWidget(self.fluid_character, 1)
+        f.addRow("Fluid form:", fluid_row)
+        self.fluid_character.setEnabled(self.fluid_mode.isChecked())
+        self.fluid_mode.toggled.connect(self.fluid_character.setEnabled)
+        self.update_character_preview()
 
         self.theme = QComboBox()
         self.theme.addItem("Light", "light")
@@ -649,6 +668,10 @@ class SettingsDialog(QDialog):
         f.addRow(bb)
 
     def update_character_preview(self):
+        if self.fluid_mode.isChecked():
+            self.character_preview.setPixmap(
+                buddy_pixmap(60, "happy", self.fluid_character.currentData()))
+            return
         self.character_preview.setPixmap(
             buddy_pixmap(60, "happy", self.character.currentData()))
 
@@ -670,6 +693,8 @@ class SettingsDialog(QDialog):
         return {
             **self.settings,
             "character": self.character.currentData() or DEFAULT_CHARACTER,
+            "fluid_mode": self.fluid_mode.isChecked(),
+            "fluid_character": self.fluid_character.currentData() or "vanta",
             "theme": self.theme.currentData() or "light",
             "accent_color": self._accent_color,
             "font_size": self.font_size.value(),
@@ -744,8 +769,18 @@ def build_stylesheet(settings: dict) -> str:
                 contrast_ratio(light_text, background) else light_text).name()
 
     theme = settings.get("theme", "light")
+    fluid = bool(settings.get("fluid_mode", False))
     dark = theme == "dark"
-    if dark:
+    if fluid:
+        colors = {
+            "background": "#0d1725", "panel": "#172638", "field": "#111f30",
+            "foreground": "#eaf7ff", "muted": "#a8c5d7", "border": "#31516a",
+            "hover": "#20384d", "tab_bg": "#15263a", "tips_bg": "#12363a",
+            "tips_border": "#277b79", "tips_text": "#bcf6ec",
+            "disabled_bg": "#1b2935", "disabled_text": "#8197a6",
+            "selection": "#174a59",
+        }
+    elif dark:
         colors = {
             "background": "#202127", "panel": "#292b33", "field": "#252730",
             "foreground": "#eeeaf1", "muted": "#bcb2bf", "border": "#454650",
@@ -788,6 +823,44 @@ def build_stylesheet(settings: dict) -> str:
     style = STYLE
     for key, value in values.items():
         style = style.replace(f"@{key}@", str(value))
+    if fluid:
+        style += """
+QMainWindow, QDialog { background-color: rgba(7, 15, 27, 232); }
+QWidget#root {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+        stop:0 rgba(11, 27, 43, 222), stop:1 rgba(18, 24, 45, 232));
+    border: 1px solid rgba(118, 225, 238, 110);
+    border-radius: 18px;
+}
+QGroupBox {
+    background: rgba(23, 47, 67, 176);
+    border: 1px solid rgba(115, 210, 229, 105);
+}
+QListWidget#drop, QLabel#preview, QLineEdit, QComboBox, QSpinBox,
+QDoubleSpinBox, QPlainTextEdit {
+    background: rgba(8, 22, 36, 218);
+    border-color: rgba(101, 204, 222, 145);
+}
+QPushButton, QTabBar::tab {
+    background: rgba(29, 53, 73, 205);
+    border-color: rgba(99, 179, 204, 130);
+}
+QTabWidget::pane {
+    background: rgba(13, 29, 45, 96);
+    border: 1px solid rgba(104, 202, 221, 95);
+    border-radius: 12px;
+}
+QProgressBar { background: rgba(81, 133, 157, 100); }
+QMenu {
+    background: rgba(11, 27, 43, 242);
+    border-color: rgba(115, 210, 229, 155);
+}
+QAbstractItemView {
+    background: rgba(11, 27, 43, 246);
+    color: #eaf7ff;
+    selection-background-color: rgba(33, 101, 119, 230);
+}
+"""
     return style
 
 
@@ -890,16 +963,21 @@ class MainWindow(QMainWindow):
 
     def apply_ui_preferences(self):
         app = QApplication.instance()
+        fluid = bool(self.settings.get("fluid_mode", False))
+        self.setAttribute(Qt.WA_TranslucentBackground, fluid)
+        self.quick_convert.setAttribute(Qt.WA_TranslucentBackground, fluid)
         if app:
             app.setStyleSheet(build_stylesheet(self.settings))
+        character = (self.settings.get("fluid_character", "vanta") if fluid else
+                     self.settings.get("character", DEFAULT_CHARACTER))
         icon = QIcon(buddy_pixmap(
-            256, "idle", self.settings.get("character", DEFAULT_CHARACTER)))
+            256, "idle", character))
         self.setWindowIcon(icon)
         self.quick_convert.setWindowIcon(icon)
         if self.tray:
             self.tray.setIcon(icon)
         self.mascot.setPixmap(
-            buddy_pixmap(64, "happy", self.settings.get("character", DEFAULT_CHARACTER)))
+            buddy_pixmap(64, "happy", character))
         compact = self.settings.get("density", "comfortable") == "compact"
         for layout in self.findChildren(QLayout):
             layout.setSpacing(6 if compact else 10)
